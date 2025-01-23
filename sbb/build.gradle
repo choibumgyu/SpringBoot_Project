@@ -11,6 +11,7 @@ java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(21)
 	}
+	sourceCompatibility= '19'
 }
 
 repositories {
