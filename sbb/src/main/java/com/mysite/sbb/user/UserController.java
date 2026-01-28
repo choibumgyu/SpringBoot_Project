@@ -71,9 +71,12 @@ public class UserController {
         // 사용자가 작성한 질문과 답변 가져오기
         List<Question> questions = questionService.getQuestionsByAuthor(username);
         List<Answer> answers = answerService.getAnswersByAuthor(username);
+        List<Question> likedQuestions = questionService.getVotedQuestionsByUsername(username);
+        
         model.addAttribute("name",username);
         model.addAttribute("questions", questions);
         model.addAttribute("answers", answers);
+        model.addAttribute("likedQuestions", likedQuestions); 
         return "mypage";
     }
 	
