@@ -1,21 +1,22 @@
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-    <title>마이페이지</title>
-	<style>
-		.mypage-title {
-		            color: #6c757d; /* 회색 */
-		            font-family: 'Arial', sans-serif; /* 폰트 */
-		            font-size: 36px; /* 글씨 크기 */
-		            font-weight: bold; /* 굵게 */
-		            text-align: center; /* 가운데 정렬 */
-		            margin-top: 20px; /* 위쪽 여백 */
-		        }
-	   </style>
-</head>
-<body>
-<div class="container">
-	<h2 class="mypage-title" th:text="${name} + '님의 마이페이지'"></h2> <!-- 동일 스타일 적용 -->
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout}">
+
+<div layout:fragment="content" class="container">
+    <style>
+        .mypage-title {
+            color: #6c757d;
+            font-family: 'Arial', sans-serif;
+            font-size: 36px;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+
+
+    <h2 class="mypage-title" th:text="${name} + '님의 마이페이지'"></h2>
+
     <h3>내 질문</h3>
     <ul>
         <li th:each="question : ${questions}">
@@ -29,6 +30,18 @@
             <a th:href="@{/question/detail/{id}(id=${answer.question.id})}" th:text="${answer.question.subject}"></a>
         </li>
     </ul>
+
+    <h3>좋아요 한 질문</h3>
+    <ul>
+        <li th:if="${#lists.isEmpty(likedQuestions)}">
+            좋아요 한 질문이 없습니다.
+        </li>
+
+        <li th:each="question : ${likedQuestions}">
+            <a th:href="@{/question/detail/{id}(id=${question.id})}"
+               th:text="${question.subject}"></a>
+        </li>
+    </ul>
 </div>
-</body>
+
 </html>

@@ -20,6 +20,15 @@
 				</div>
 			</div>
 			<div class="my-3">
+				<a href="javascript:void(0);"
+				    class="recommend btn btn-sm btn-outline-secondary"
+				    th:data-uri="@{|/question/vote/${question.id}|}"
+				    th:data-liked="${#sets.contains(question.voter, @userService.getUser(#authentication.name))}">
+				    좋아요
+				    <span class="badge rounded-pill bg-success"
+				          th:text="${#sets.size(question.voter)}"></span>
+				 </a>
+				
 			            <a th:href="@{|/question/modify/${question.id}|}" class="btn btn-sm btn-outline-secondary"
 			                sec:authorize="isAuthenticated()"
 			                th:if="${question.author != null and #authentication.getPrincipal().getUsername() == question.author.username}"
@@ -78,6 +87,22 @@ Array.from(delete_elements).forEach(function(element) {
         if(confirm("정말로 삭제하시겠습니까?")) {
             location.href = this.dataset.uri;
         };
+    });
+});
+const recommend_elements = document.getElementsByClassName("recommend");
+
+Array.from(recommend_elements).forEach(function(element) {
+    element.addEventListener('click', function() {
+
+        const liked = this.dataset.liked === "true";
+
+        const message = liked
+            ? "좋아요를 해제하시겠습니까?"
+            : "정말 좋아요를 누르시겠습니까?";
+
+        if (confirm(message)) {
+            location.href = this.dataset.uri;
+        }
     });
 });
 </script>
