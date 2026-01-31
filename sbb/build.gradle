@@ -11,7 +11,6 @@ java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(21)
 	}
-	sourceCompatibility= '19'
 }
 
 repositories {
@@ -26,6 +25,7 @@ dependencies {
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	runtimeOnly 'com.h2database:h2'
+	runtimeOnly 'org.postgresql:postgresql'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	testImplementation 'org.junit.jupiter:junit-jupiter' 
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
