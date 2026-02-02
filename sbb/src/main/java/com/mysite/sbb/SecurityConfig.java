@@ -26,7 +26,9 @@ public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
 
     private void common(HttpSecurity http) throws Exception {
+
         http.authorizeHttpRequests(auth -> auth
+                // ✅ 정적 리소스 허용
                 .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
                 .requestMatchers(
                         new AntPathRequestMatcher("/**/*.css"),
@@ -42,15 +44,28 @@ public class SecurityConfig {
                         new AntPathRequestMatcher("/**/*.ttf"),
                         new AntPathRequestMatcher("/webjars/**")
                 ).permitAll()
+
+                // ✅ 공개 페이지
                 .requestMatchers(
                         new AntPathRequestMatcher("/"),
                         new AntPathRequestMatcher("/user/**"),
-                        new AntPathRequestMatcher("/h2-console/**")
+                        new AntPathRequestMatcher("/h2-console/**"),
+                        new AntPathRequestMatcher("/stock"),
+                        new AntPathRequestMatcher("/ws/**")   // /ws/stock 포함
                 ).permitAll()
+
+                // ✅ 반드시 마지막에 한 번만
                 .anyRequest().authenticated()
         );
 
-        http.csrf(csrf -> csrf.ignoringRequestMatchers(new AntPathRequestMatcher("/h2-console/**")));
+        // ✅ H2 콘솔 + 웹소켓은 CSRF 예외 처리 (웹소켓 핸드셰이크가 막히는 경우 대비)
+        http.csrf(csrf -> csrf
+                .ignoringRequestMatchers(
+                        new AntPathRequestMatcher("/h2-console/**"),
+                        new AntPathRequestMatcher("/ws/**")
+                )
+        );
+
         http.headers(headers -> headers.addHeaderWriter(
                 new XFrameOptionsHeaderWriter(XFrameOptionsHeaderWriter.XFrameOptionsMode.SAMEORIGIN)
         ));
@@ -71,7 +86,7 @@ public class SecurityConfig {
     @Profile("local")
     SecurityFilterChain localFilterChain(HttpSecurity http) throws Exception {
         common(http);
-        // ✅ local에서는 OAuth2 관련 설정을 “아예 호출하지 않는다”
+        // local에서는 OAuth2 설정 미적용
         return http.build();
     }
 

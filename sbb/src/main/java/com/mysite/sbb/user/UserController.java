@@ -14,6 +14,8 @@ import com.mysite.sbb.question.QuestionService;
 import com.mysite.sbb.answer.AnswerService;
 import com.mysite.sbb.question.Question;
 import com.mysite.sbb.answer.Answer;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +69,7 @@ public class UserController {
     @GetMapping("/mypage")
     public String myPage(Model model, Principal principal) {
         String username = principal.getName();
-        
+        SiteUser user = userService.getUser(username);
         // 사용자가 작성한 질문과 답변 가져오기
         List<Question> questions = questionService.getQuestionsByAuthor(username);
         List<Answer> answers = answerService.getAnswersByAuthor(username);
@@ -77,7 +79,21 @@ public class UserController {
         model.addAttribute("questions", questions);
         model.addAttribute("answers", answers);
         model.addAttribute("likedQuestions", likedQuestions); 
+        String profileImageUrl = null;
+        if (user.getProfileImagePath() != null) {
+            profileImageUrl = "/uploads/" + user.getProfileImagePath();
+        }
+        model.addAttribute("profileImageUrl", profileImageUrl);
         return "mypage";
     }
+	
+	@PreAuthorize("isAuthenticated()")
+	@PostMapping("/mypage/profile-image")
+	public String uploadProfileImage(@RequestParam("profileImage") MultipartFile file,
+	                                 Principal principal) {
+	    String username = principal.getName();
+	    userService.updateProfileImage(username, file);
+	    return "redirect:/user/mypage";
+	}
 	
 }

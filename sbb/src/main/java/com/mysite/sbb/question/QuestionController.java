@@ -44,6 +44,16 @@ public class QuestionController {
 	public String detail(Model model, @PathVariable("id") Integer id, AnswerForm answerForm) {
 		Question question = this.questionService.getQuestion(id);
 		questionService.increaseViewCount(question);
+		String authorProfileImageUrl = null;
+
+		if (!question.isAnonymous() && question.getAuthor() != null) {
+		    String path = question.getAuthor().getProfileImagePath();
+		    if (path != null) {
+		        authorProfileImageUrl = "/uploads/" + path;
+		    }
+		}
+
+		model.addAttribute("authorProfileImageUrl", authorProfileImageUrl);
 		model.addAttribute("question", question);
 		return "question_detail";
 	}

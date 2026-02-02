@@ -1,0 +1,36 @@
+<html layout:decorate="~{layout}">
+<div layout:fragment="content" class="container my-3">
+  <h3 class="mb-3">삼성전자(005930) 실시간 가격</h3>
+
+  <div class="card p-3">
+    <div>현재가:</div>
+    <div id="price" style="font-size: 2rem; font-weight: 700;">-</div>
+    <div id="status" class="text-muted mt-2">연결 대기중...</div>
+  </div>
+</div>
+
+<script layout:fragment="script" type="text/javascript">
+  // 우리 서버 웹소켓(/ws/stock)으로 연결
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/stock");
+
+  ws.onopen = () => {
+    document.getElementById("status").innerText = "연결됨. 구독 요청 전송...";
+    // 서버에 “005930 구독” 요청 (서버가 KIS로 대신 구독)
+    ws.send(JSON.stringify({ type: "SUBSCRIBE", code: "005930" }));
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "PRICE") {
+      document.getElementById("price").innerText = msg.price;
+      document.getElementById("status").innerText = "실시간 수신중";
+    } else if (msg.type === "ERROR") {
+      document.getElementById("status").innerText = "에러: " + msg.message;
+    }
+  };
+
+  ws.onclose = () => {
+    document.getElementById("status").innerText = "연결 종료";
+  };
+</script>
+</html>

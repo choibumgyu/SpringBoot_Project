@@ -28,5 +28,7 @@ public class SiteUser {
 	
     private String provider;     // google
 	private String providerId;   // google sub
+	
+	private String profileImagePath;
 
 }
