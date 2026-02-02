@@ -1,7 +1,7 @@
 <html layout:decorate="~{layout}">
 <div layout:fragment="content" class="container">
     <h5 class="my-3 border-bottom pb-2">질문등록</h5>
-    <form th:object="${questionForm}" method="post">
+    <form th:object="${questionForm}" method="post" onsubmit="return disableSubmit(this);">
         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
         <div th:replace="~{form_errors :: formErrorsFragment}"></div>
         <div class="mb-3">
@@ -12,8 +12,24 @@
             <label for="content" class="form-label">내용</label>
             <textarea th:field="*{content}" class="form-control" rows="10"></textarea>
         </div>
-        <input type="submit" value="저장하기" class="btn btn-primary my-2" name="saveType">
-		<input type="submit" value="익명으로 저장하기" class="btn btn-secondary my-2" name="saveType">
+        <input type="submit" value="저장하기" class="btn btn-primary my-2 submit-btn" name="saveType">
+        <input type="submit" value="익명으로 저장하기" class="btn btn-secondary my-2 submit-btn" name="saveType">
     </form>
 </div>
+
+<script layout:fragment="script" type='text/javascript'>
+function disableSubmit(form) {
+    // 1. 모든 제출 버튼을 찾음
+    const buttons = form.querySelectorAll('.submit-btn');
+    
+    // 2. 버튼들을 비활성화 (사용자가 다시 못 누르게)
+    buttons.forEach(button => {
+        button.disabled = true;
+        button.value = "처리 중..."; // 사용자에게 진행 중임을 알림
+    });
+    
+    // 3. 폼은 정상적으로 제출됨
+    return true; 
+}
+</script>
 </html>
