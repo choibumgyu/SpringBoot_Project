@@ -1,8 +1,20 @@
 <html layout:decorate="~{layout}">
 <div layout:fragment="content" class="container my-3">
-  <h3 class="mb-3">삼성전자(005930) 실시간 가격</h3>
+  <h3 class="mb-3">삼성전자(005930)</h3>
 
   <div class="card p-3">
+    <div class="mb-2">
+      <span class="text-muted">전일 종가</span> :
+      <strong id="prevClose">-</strong>
+    </div>
+
+    <div class="mb-2">
+      <span class="text-muted">등락률</span> :
+      <strong id="rate">-</strong>
+    </div>
+
+    <hr>
+
     <div>현재가:</div>
     <div id="price" style="font-size: 2rem; font-weight: 700;">-</div>
     <div id="status" class="text-muted mt-2">연결 대기중...</div>
@@ -10,12 +22,35 @@
 </div>
 
 <script layout:fragment="script" type="text/javascript">
-  // 우리 서버 웹소켓(/ws/stock)으로 연결
-  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/stock");
+  async function loadSummary() {
+    try {
+      const res = await fetch("/api/stocks/005930/summary");
+      const data = await res.json();
+
+      document.getElementById("prevClose").innerText = data.prevClose;
+      document.getElementById("rate").innerText = data.rate + "%";
+
+      const rateEl = document.getElementById("rate");
+      const rateNum = parseFloat(data.rate);
+      if (!isNaN(rateNum)) {
+        if (rateNum > 0) rateEl.style.color = "red";
+        else if (rateNum < 0) rateEl.style.color = "blue";
+      }
+    } catch (e) {
+      document.getElementById("status").innerText = "요약 정보 로드 실패";
+    }
+  }
+
+  loadSummary();
+
+  const ws = new WebSocket(
+    (location.protocol === "https:" ? "wss://" : "ws://")
+    + location.host
+    + "/ws/stock"
+  );
 
   ws.onopen = () => {
     document.getElementById("status").innerText = "연결됨. 구독 요청 전송...";
-    // 서버에 “005930 구독” 요청 (서버가 KIS로 대신 구독)
     ws.send(JSON.stringify({ type: "SUBSCRIBE", code: "005930" }));
   };
 

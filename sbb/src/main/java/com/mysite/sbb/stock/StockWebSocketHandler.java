@@ -36,18 +36,33 @@ public class StockWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-    	session.sendMessage(new TextMessage("{\"type\":\"ACK\",\"code\":\"005930\"}"));
-    	 log.info("[WS] recv message: {}", message.getPayload());
-        Map<String, Object> req = om.readValue(message.getPayload(), Map.class);
-        String type = (String) req.get("type");
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) {
 
-        if ("SUBSCRIBE".equals(type)) {
-            String code = (String) req.get("code"); // "005930"
+        try {
+            session.sendMessage(new TextMessage("{\"type\":\"ACK\",\"code\":\"005930\"}"));
+            log.info("[WS] ACK sent. session={}, open={}", session.getId(), session.isOpen());
 
-            kisClient.subscribe(code, price -> broadcastPrice(price));
+            log.info("[WS] recv message: {}", message.getPayload());
+
+            Map<String, Object> req = om.readValue(message.getPayload(), Map.class);
+            String type = (String) req.get("type");
+
+            if ("SUBSCRIBE".equals(type)) {
+                String code = (String) req.get("code");
+
+                kisClient.subscribe(code, price -> broadcastPrice(price));
+            }
+
+        } catch (Exception e) {
+            log.error("[WS] handleTextMessage error", e);
+            try {
+                session.sendMessage(
+                    new TextMessage("{\"type\":\"ERROR\",\"message\":\"" + e.getMessage() + "\"}")
+                );
+            } catch (Exception ignore) {}
         }
     }
+
 
     private void broadcastPrice(String price) {
         try {
