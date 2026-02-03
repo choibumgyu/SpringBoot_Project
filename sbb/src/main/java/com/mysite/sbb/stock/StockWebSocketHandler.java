@@ -3,6 +3,7 @@ package com.mysite.sbb.stock;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
@@ -12,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mysite.sbb.kis.KisRealtimeClient;
 
 @Component
+@Slf4j
 public class StockWebSocketHandler extends TextWebSocketHandler {
 
     private final KisRealtimeClient kisClient;
@@ -35,6 +37,8 @@ public class StockWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    	session.sendMessage(new TextMessage("{\"type\":\"ACK\",\"code\":\"005930\"}"));
+    	 log.info("[WS] recv message: {}", message.getPayload());
         Map<String, Object> req = om.readValue(message.getPayload(), Map.class);
         String type = (String) req.get("type");
 
