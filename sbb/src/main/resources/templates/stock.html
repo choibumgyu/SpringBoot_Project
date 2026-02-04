@@ -22,50 +22,204 @@
 </div>
 
 <script layout:fragment="script" type="text/javascript">
-  async function loadSummary() {
+  const CODE = "005930";
+
+  // 전일 종가 숫자값 저장용
+  let prevCloseNum = null;
+
+  // REST로 가져온 "현재가" 저장(장외 폴백용)
+  let restCurrentNum = null;
+
+  // WS 마지막 수신 시각(장중 폴백 판단용)
+  let lastWsAt = 0;
+
+  // REST 폴백 호출 쿨다운(서버 부하 방지)
+  let lastRestPriceAt = 0;
+
+  // -----------------------------
+  // 시간 판정: 한국시간 기준 장중(09:00~15:30)
+  // -----------------------------
+  function isMarketHoursKST() {
+    const now = new Date();
+    // 브라우저가 한국시간이면 그대로 사용. (네 환경은 KST라 OK)
+    const day = now.getDay(); // 0=일, 6=토
+    if (day === 0 || day === 6) return false;
+
+    const hh = now.getHours();
+    const mm = now.getMinutes();
+    const t = hh * 60 + mm;
+
+    const open = 9 * 60;        // 09:00
+    const close = 15 * 60 + 30; // 15:30
+    return t >= open && t <= close;
+  }
+
+  function toNum(v) {
+    if (v == null) return NaN;
+    const raw = v.toString().replaceAll(",", "").trim();
+    return Number(raw);
+  }
+
+  function setPriceDisplay(nOrText) {
+    const el = document.getElementById("price");
+    if (typeof nOrText === "number" && Number.isFinite(nOrText)) {
+      el.innerText = nOrText.toLocaleString();
+    } else {
+      el.innerText = nOrText ?? "-";
+    }
+  }
+
+  function updateRate(currentPriceNum) {
+    const rateEl = document.getElementById("rate");
+    if (!prevCloseNum || !Number.isFinite(currentPriceNum)) {
+      rateEl.innerText = "-";
+      rateEl.style.color = "";
+      return;
+    }
+
+    const rate = ((currentPriceNum - prevCloseNum) / prevCloseNum) * 100;
+    rateEl.innerText = rate.toFixed(2) + "%";
+
+    if (rate > 0) rateEl.style.color = "red";
+    else if (rate < 0) rateEl.style.color = "blue";
+    else rateEl.style.color = "";
+  }
+
+  // -----------------------------
+  // 1) Summary(전일종가 + REST현재가) 로드
+  // -----------------------------
+  async function loadSummaryAndMaybeRestPrice() {
     try {
-      const res = await fetch("/api/stocks/005930/summary");
+      const res = await fetch(`/api/stocks/${CODE}/summary`);
+      if (!res.ok) throw new Error("summary fetch failed");
       const data = await res.json();
 
-      document.getElementById("prevClose").innerText = data.prevClose;
-      document.getElementById("rate").innerText = data.rate + "%";
+      // 전일 종가
+      document.getElementById("prevClose").innerText = data.prevClose || "-";
+      const pc = toNum(data.prevClose);
+      prevCloseNum = Number.isFinite(pc) && pc > 0 ? pc : null;
 
-      const rateEl = document.getElementById("rate");
-      const rateNum = parseFloat(data.rate);
-      if (!isNaN(rateNum)) {
-        if (rateNum > 0) rateEl.style.color = "red";
-        else if (rateNum < 0) rateEl.style.color = "blue";
+      // REST 현재가(장외 폴백용)
+      const cur = toNum(data.current);
+      restCurrentNum = Number.isFinite(cur) ? cur : null;
+
+      // 장외면: REST 현재가를 바로 화면에 반영
+      if (!isMarketHoursKST() && restCurrentNum != null) {
+        setPriceDisplay(restCurrentNum);
+        updateRate(restCurrentNum);
+        document.getElementById("status").innerText = "장외시간: REST 현재가 표시중";
       }
+
     } catch (e) {
+      console.error(e);
       document.getElementById("status").innerText = "요약 정보 로드 실패";
     }
   }
 
-  loadSummary();
+  // -----------------------------
+  // 2) REST로 현재가만 주기적으로 폴백
+  //    - 장외: 30~60초마다
+  //    - 장중: WS가 N초 이상 무응답이면 1회 폴백
+  // -----------------------------
+  async function fetchRestPriceCooldown(cooldownMs) {
+    const now = Date.now();
+    if (now - lastRestPriceAt < cooldownMs) return; // 쿨다운
+    lastRestPriceAt = now;
 
+    try {
+      const res = await fetch(`/api/stocks/${CODE}/summary`);
+      if (!res.ok) throw new Error("rest price fetch failed");
+      const data = await res.json();
+
+      const cur = toNum(data.current);
+      if (Number.isFinite(cur)) {
+        restCurrentNum = cur;
+
+        // 장외는 무조건 REST로 표시
+        if (!isMarketHoursKST()) {
+          setPriceDisplay(cur);
+          updateRate(cur);
+          document.getElementById("status").innerText = "장외시간: REST 현재가 표시중";
+        } else {
+          // 장중 폴백: WS가 안 오면 REST로 임시 표시
+          const silentMs = now - lastWsAt;
+          if (silentMs > 15_000) { // 15초 이상 WS 무응답이면
+            setPriceDisplay(cur);
+            updateRate(cur);
+            document.getElementById("status").innerText = "WS 무응답: REST로 임시 표시중";
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      // 장외인데 REST도 실패하면 상태만 표시
+      if (!isMarketHoursKST()) {
+        document.getElementById("status").innerText = "장외시간: REST 현재가 조회 실패";
+      }
+    }
+  }
+
+  // 페이지 진입시 1회 summary 로드
+  loadSummaryAndMaybeRestPrice();
+
+  // 장외 폴백 폴링(예: 60초)
+  setInterval(() => {
+    if (!isMarketHoursKST()) {
+      fetchRestPriceCooldown(30_000); // 30초 쿨다운
+    }
+  }, 60_000);
+
+  // 장중 WS 무응답 폴백 체크(예: 5초마다)
+  setInterval(() => {
+    if (isMarketHoursKST()) {
+      fetchRestPriceCooldown(30_000); // 장중에도 REST 남발 방지
+    }
+  }, 5_000);
+
+  // -----------------------------
+  // 3) WebSocket 연결 (장중이면 SUBSCRIBE)
+  // -----------------------------
   const ws = new WebSocket(
-    (location.protocol === "https:" ? "wss://" : "ws://")
-    + location.host
-    + "/ws/stock"
+    (location.protocol === "https:" ? "wss://" : "ws://") +
+      location.host +
+      "/ws/stock"
   );
 
   ws.onopen = () => {
-    document.getElementById("status").innerText = "연결됨. 구독 요청 전송...";
-    ws.send(JSON.stringify({ type: "SUBSCRIBE", code: "005930" }));
+    if (isMarketHoursKST()) {
+      document.getElementById("status").innerText = "장중: WS 연결됨. 구독 요청 전송...";
+      ws.send(JSON.stringify({ type: "SUBSCRIBE", code: CODE }));
+    } else {
+      document.getElementById("status").innerText = "장외: REST 현재가 사용 (WS 구독 안함)";
+      // 굳이 구독할 필요 없음 (원하면 주석 해제 가능)
+      // ws.send(JSON.stringify({ type: "SUBSCRIBE", code: CODE }));
+    }
   };
 
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data);
+
     if (msg.type === "PRICE") {
-      document.getElementById("price").innerText = msg.price;
-      document.getElementById("status").innerText = "실시간 수신중";
+      const priceNum = toNum(msg.price);
+      lastWsAt = Date.now();
+
+      if (Number.isFinite(priceNum)) {
+        setPriceDisplay(priceNum);
+        updateRate(priceNum);
+        document.getElementById("status").innerText = "장중: WS 실시간 수신중";
+      }
     } else if (msg.type === "ERROR") {
-      document.getElementById("status").innerText = "에러: " + msg.message;
+      document.getElementById("status").innerText = "WS 에러: " + msg.message;
     }
   };
 
   ws.onclose = () => {
-    document.getElementById("status").innerText = "연결 종료";
+    // 장외면 WS 끊겨도 상관 없음
+    if (!isMarketHoursKST()) {
+      document.getElementById("status").innerText = "장외: REST 현재가 표시중";
+    } else {
+      document.getElementById("status").innerText = "장중: WS 연결 종료 (REST 폴백 시도중)";
+    }
   };
 </script>
 </html>

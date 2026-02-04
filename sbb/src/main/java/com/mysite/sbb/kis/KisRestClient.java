@@ -85,11 +85,11 @@ public class KisRestClient {
 
             // ✅ 필드명은 실제 KIS 응답에 맞춰 조정 필요
             String current = out.path("stck_prpr").asText("");   // 현재가
-            String prevClose = out.path("prdy_clpr").asText(""); // 전일 종가
-            String diff = out.path("prdy_vrss").asText("");      // 전일 대비
-            String rate = out.path("prdy_ctrt").asText("");      // 등락률(%)
+            String prevClose = out.path("stck_sdpr").asText(""); // 전일 종가
+            //String diff = out.path("prdy_vrss").asText("");      // 전일 대비
+            //String rate = out.path("prdy_ctrt").asText("");      // 등락률(%)
 
-            return new StockSummary(prevClose, diff, rate, current);
+            return new StockSummary(prevClose,current);
 
         } catch (Exception e) {
             throw new RuntimeException("KIS summary parse failed", e);
@@ -99,8 +99,6 @@ public class KisRestClient {
     // DTO를 inner class로 두면 파일 하나로 컴파일 쉬움
     public record StockSummary(
             String prevClose, // 전일 종가
-            String diff,      // 전일 대비
-            String rate,      // 등락률
-            String current    // 현재가(참고)
+            String current    // 현재가(REST)
     ) {}
 }
