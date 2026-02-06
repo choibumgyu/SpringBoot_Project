@@ -2,6 +2,7 @@ package com.mysite.sbb;
 
 import com.mysite.sbb.user.CustomOAuth2UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,12 +24,12 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final CustomOAuth2UserService customOAuth2UserService;
+    // ✅ local에서도 SecurityConfig는 생성되므로, OAuth2 관련 빈을 “필요할 때만” 꺼내도록 변경
+    private final ObjectProvider<CustomOAuth2UserService> customOAuth2UserServiceProvider;
 
     private void common(HttpSecurity http) throws Exception {
 
         http.authorizeHttpRequests(auth -> auth
-                // ✅ 정적 리소스 허용
                 .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
                 .requestMatchers(
                         new AntPathRequestMatcher("/**/*.css"),
@@ -51,14 +52,13 @@ public class SecurityConfig {
                         new AntPathRequestMatcher("/user/**"),
                         new AntPathRequestMatcher("/h2-console/**"),
                         new AntPathRequestMatcher("/stock"),
-                        new AntPathRequestMatcher("/ws/**")   // /ws/stock 포함
+                        new AntPathRequestMatcher("/api/stocks/**"), // ✅ 추가: search/summary 등
+                        new AntPathRequestMatcher("/ws/**")
                 ).permitAll()
 
-                // ✅ 반드시 마지막에 한 번만
                 .anyRequest().authenticated()
         );
 
-        // ✅ H2 콘솔 + 웹소켓은 CSRF 예외 처리 (웹소켓 핸드셰이크가 막히는 경우 대비)
         http.csrf(csrf -> csrf
                 .ignoringRequestMatchers(
                         new AntPathRequestMatcher("/h2-console/**"),
@@ -86,7 +86,6 @@ public class SecurityConfig {
     @Profile("local")
     SecurityFilterChain localFilterChain(HttpSecurity http) throws Exception {
         common(http);
-        // local에서는 OAuth2 설정 미적용
         return http.build();
     }
 
@@ -95,11 +94,14 @@ public class SecurityConfig {
     SecurityFilterChain prodFilterChain(HttpSecurity http) throws Exception {
         common(http);
 
-        http.oauth2Login(oauth2 -> oauth2
-                .loginPage("/user/login")
-                .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
-                .defaultSuccessUrl("/", true)
-        );
+        CustomOAuth2UserService customOAuth2UserService = customOAuth2UserServiceProvider.getIfAvailable();
+        if (customOAuth2UserService != null) {
+            http.oauth2Login(oauth2 -> oauth2
+                    .loginPage("/user/login")
+                    .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
+                    .defaultSuccessUrl("/", true)
+            );
+        }
 
         return http.build();
     }

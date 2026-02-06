@@ -1,15 +1,10 @@
 package com.mysite.sbb.kis;
 
-
-
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,6 +17,7 @@ public class KisRestClient {
 
     @Value("${kis.rest.base-url}")
     private String baseUrl;
+
     @Value("${kis.app-key}")
     private String appKey;
 
@@ -36,69 +32,72 @@ public class KisRestClient {
         this.approvalService = approvalService;
     }
 
-    /**
-     * 전일 종가/등락률 등 "한번 가져오면 되는" 정보 조회
-     * (국내주식 현재가/기준가 조회 API 예시)
-     */
     public StockSummary getStockSummary(String code) {
 
-        // ✅ KIS REST 엔드포인트 (예시)
         String url = baseUrl + "/uapi/domestic-stock/v1/quotations/inquire-price";
 
-        // ✅ 헤더 구성 (아래 값들은 너의 KisApprovalService가 제공하는 값에 맞춰 수정)
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-
-        // TODO: 너 서비스에 access token 발급 메서드가 있으면 사용
-        // headers.set("authorization", "Bearer " + approvalService.getAccessToken());
-
-        // TODO: appkey/appsecret을 properties로 관리하고 있으면 주입받거나 서비스에서 제공
-        // headers.set("appkey", approvalService.getAppKey());
-        // headers.set("appsecret", approvalService.getAppSecret());
-
         headers.set("appkey", appKey);
         headers.set("appsecret", appSecret);
         headers.set("authorization", "Bearer " + approvalService.getAccessToken());
         headers.set("tr_id", "FHKST01010100");
 
-
-        // ✅ Query Param
         String finalUrl = UriComponentsBuilder.fromHttpUrl(url)
                 .queryParam("fid_cond_mrkt_div_code", "J")
                 .queryParam("fid_input_iscd", code)
                 .toUriString();
 
         HttpEntity<Void> entity = new HttpEntity<>(headers);
-        log.info("[KIS-REST] url={}", finalUrl);
-        log.info("[KIS-REST] headers: authorization={}, appkey={}, appsecret={}, tr_id={}",
-                headers.getFirst("authorization") != null,
-                headers.getFirst("appkey") != null,
-                headers.getFirst("appsecret") != null,
-                headers.getFirst("tr_id"));
 
-        ResponseEntity<String> response =
-                restTemplate.exchange(finalUrl, HttpMethod.GET, entity, String.class);
+        log.info("[KIS-REST] GET {}", finalUrl);
 
         try {
-            JsonNode root = om.readTree(response.getBody());
-            JsonNode out = root.path("output");
+            ResponseEntity<String> response =
+                    restTemplate.exchange(finalUrl, HttpMethod.GET, entity, String.class);
 
-            // ✅ 필드명은 실제 KIS 응답에 맞춰 조정 필요
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                throw new RuntimeException("KIS REST non-2xx: " + response.getStatusCode());
+            }
+
+            String body = response.getBody();
+            if (body == null || body.isBlank()) {
+                throw new RuntimeException("KIS REST empty body");
+            }
+
+            JsonNode root = om.readTree(body);
+
+            // (선택) KIS 응답에 에러 구조가 있을 수도 있어서 메시지 후보를 뽑아둠
+            // - 실제 키는 KIS 응답 스펙에 따라 다를 수 있음
+            JsonNode out = root.path("output");
+            if (out.isMissingNode() || out.isNull() || out.size() == 0) {
+                String msg = root.path("msg1").asText(""); // 종종 이런 형태가 있을 때가 있음
+                throw new RuntimeException("KIS REST missing output. msg=" + msg);
+            }
+
             String current = out.path("stck_prpr").asText("");   // 현재가
             String prevClose = out.path("stck_sdpr").asText(""); // 전일 종가
-            //String diff = out.path("prdy_vrss").asText("");      // 전일 대비
-            //String rate = out.path("prdy_ctrt").asText("");      // 등락률(%)
 
-            return new StockSummary(prevClose,current);
+            return new StockSummary(prevClose, current);
+
+        } catch (RestClientResponseException e) {
+            // 4xx/5xx가 났을 때 응답 바디를 같이 로그로 남겨주면 디버깅이 쉬움
+            log.error("[KIS-REST] HTTP error status={} body={}", e.getRawStatusCode(), safeBody(e.getResponseBodyAsString()));
+            throw new RuntimeException("KIS REST HTTP error: " + e.getRawStatusCode(), e);
 
         } catch (Exception e) {
+            log.error("[KIS-REST] parse/unknown error", e);
             throw new RuntimeException("KIS summary parse failed", e);
         }
     }
 
-    // DTO를 inner class로 두면 파일 하나로 컴파일 쉬움
+    private String safeBody(String s) {
+        if (s == null) return "";
+        return s.length() > 500 ? s.substring(0, 500) + "..." : s;
+    }
+
     public record StockSummary(
-            String prevClose, // 전일 종가
-            String current    // 현재가(REST)
+            String prevClose,
+            String current
     ) {}
 }

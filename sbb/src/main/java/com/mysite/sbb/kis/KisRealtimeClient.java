@@ -37,7 +37,7 @@ public class KisRealtimeClient {
     private volatile WebSocketSession kisSession;
 
     // 코드별 콜백
-    private final Map<String, StockPriceListener> listeners = new ConcurrentHashMap<>();
+    private final Map<String, Set<StockPriceListener>> listeners = new ConcurrentHashMap<>();
 
     // 중복 구독 방지 + 재구독 대상
     private final Set<String> subscribed = ConcurrentHashMap.newKeySet();
@@ -73,35 +73,48 @@ public class KisRealtimeClient {
      * listener: 현재가(String)
      */
     public void subscribe(String code, StockPriceListener listener) throws Exception {
-        listeners.put(code, listener);
 
-        // 구독 목록에 추가(재연결 시 재구독용)
-        boolean firstTime = subscribed.add(code);
+        // 1) code의 리스너 집합을 만들고 등록
+        Set<StockPriceListener> set =
+                listeners.computeIfAbsent(code, k -> ConcurrentHashMap.newKeySet());
 
-        // 연결이 죽어있으면 연결 먼저
+        boolean firstListenerForThisCode = set.isEmpty();
+        set.add(listener);
+
+        // 2) 재연결 대비 subscribed에는 code를 유지
+        subscribed.add(code);
+
+        // 3) 연결 보장
         ensureConnected();
 
-        // 최초 구독일 때만 KIS로 subscribe 메시지 전송
-        if (firstTime) {
+        // 4) “이번 코드에 대한 첫 구독자”일 때만 KIS로 subscribe 전송
+        if (firstListenerForThisCode) {
             sendSubscribe(code);
             log.info("[KIS] subscribe sent. code={}", code);
-        } else {
-            // 이미 구독중이어도, 연결이 재수립된 직후라면 서버가 구독을 잃었을 수 있음
-            // 안전하게 한 번 더 보내고 싶다면 아래 주석을 해제(중복구독 응답이 귀찮으면 유지)
-            // sendSubscribe(code);
         }
     }
 
-    public void unsubscribe(String code) throws Exception {
-        listeners.remove(code);
 
-        if (subscribed.remove(code)) {
+    public void unsubscribe(String code, StockPriceListener listener) throws Exception {
+
+        Set<StockPriceListener> set = listeners.get(code);
+        if (set == null) return;
+
+        set.remove(listener);
+
+        // 리스너가 더 이상 없다면 KIS 구독 해지
+        if (set.isEmpty()) {
+            listeners.remove(code);
+
+            subscribed.remove(code);
+
             if (isConnected()) {
                 sendUnsubscribe(code);
                 log.info("[KIS] unsubscribe sent. code={}", code);
             }
         }
     }
+
 
     private boolean isConnected() {
         return kisSession != null && kisSession.isOpen();
@@ -302,17 +315,25 @@ public class KisRealtimeClient {
 
             String data = parts[3];
             String[] v = data.split("\\^", -1);
-
             if (v.length <= 2) return;
 
             String code = v[0];
             String currentPrice = v[2];
 
-            StockPriceListener listener = listeners.get(code);
-            if (listener != null) {
-                listener.onPrice(currentPrice);
+            // ✅ 변경: code -> Set<Listener>
+            Set<StockPriceListener> set = listeners.get(code);
+            if (set == null || set.isEmpty()) return;
+
+            for (StockPriceListener listener : set) {
+                try {
+                    listener.onPrice(currentPrice);
+                } catch (Exception e) {
+                    // 한 리스너가 죽어도 나머지에게는 계속 전달
+                    log.warn("[KIS] listener error. code={}", code, e);
+                }
             }
         }
+
     }
 
     @FunctionalInterface

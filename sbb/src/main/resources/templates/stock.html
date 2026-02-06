@@ -1,6 +1,23 @@
 <html layout:decorate="~{layout}">
 <div layout:fragment="content" class="container my-3">
-  <h3 class="mb-3">삼성전자(005930)</h3>
+
+  <h3 class="mb-3" id="title">종목을 검색하세요</h3>
+
+  <!-- ✅ 검색창 -->
+  <div class="mb-3">
+    <div class="input-group">
+      <input id="stockInput" type="text" class="form-control" placeholder="예: 삼성전자"
+             autocomplete="off">
+      <button id="searchBtn" class="btn btn-primary" type="button">검색</button>
+    </div>
+
+    <!-- 검색 결과 리스트 -->
+    <div id="searchBox" class="list-group mt-2" style="display:none;"></div>
+
+    <div class="form-text text-muted mt-1">
+      종목명을 입력하고 결과를 클릭하면 해당 종목으로 조회합니다.
+    </div>
+  </div>
 
   <div class="card p-3">
     <div class="mb-2">
@@ -17,12 +34,14 @@
 
     <div>현재가:</div>
     <div id="price" style="font-size: 2rem; font-weight: 700;">-</div>
-    <div id="status" class="text-muted mt-2">연결 대기중...</div>
+    <div id="status" class="text-muted mt-2">종목을 선택해 주세요.</div>
   </div>
 </div>
 
 <script layout:fragment="script" type="text/javascript">
-  const CODE = "005930";
+  // ✅ 선택된 종목 정보(동적으로 바뀜)
+  let CODE = null;
+  let NAME = null;
 
   // 전일 종가 숫자값 저장용
   let prevCloseNum = null;
@@ -36,12 +55,15 @@
   // REST 폴백 호출 쿨다운(서버 부하 방지)
   let lastRestPriceAt = 0;
 
+  // ✅ WS 객체(종목 바뀔 때 재구독/재생성)
+  let ws = null;
+  let wsReady = false;
+
   // -----------------------------
   // 시간 판정: 한국시간 기준 장중(09:00~15:30)
   // -----------------------------
   function isMarketHoursKST() {
     const now = new Date();
-    // 브라우저가 한국시간이면 그대로 사용. (네 환경은 KST라 OK)
     const day = now.getDay(); // 0=일, 6=토
     if (day === 0 || day === 6) return false;
 
@@ -85,31 +107,48 @@
     else rateEl.style.color = "";
   }
 
+  function resetNumbers() {
+    prevCloseNum = null;
+    restCurrentNum = null;
+    lastWsAt = 0;
+    lastRestPriceAt = 0;
+    document.getElementById("prevClose").innerText = "-";
+    document.getElementById("rate").innerText = "-";
+    document.getElementById("rate").style.color = "";
+    setPriceDisplay("-");
+  }
+
+  function setTitle() {
+    const titleEl = document.getElementById("title");
+    if (NAME && CODE) titleEl.innerText = `${NAME}(${CODE})`;
+    else titleEl.innerText = "종목을 검색하세요";
+  }
+
   // -----------------------------
   // 1) Summary(전일종가 + REST현재가) 로드
   // -----------------------------
   async function loadSummaryAndMaybeRestPrice() {
+    if (!CODE) return;
+
     try {
       const res = await fetch(`/api/stocks/${CODE}/summary`);
       if (!res.ok) throw new Error("summary fetch failed");
       const data = await res.json();
 
-      // 전일 종가
       document.getElementById("prevClose").innerText = data.prevClose || "-";
       const pc = toNum(data.prevClose);
       prevCloseNum = Number.isFinite(pc) && pc > 0 ? pc : null;
 
-      // REST 현재가(장외 폴백용)
       const cur = toNum(data.current);
       restCurrentNum = Number.isFinite(cur) ? cur : null;
 
-      // 장외면: REST 현재가를 바로 화면에 반영
       if (!isMarketHoursKST() && restCurrentNum != null) {
         setPriceDisplay(restCurrentNum);
         updateRate(restCurrentNum);
         document.getElementById("status").innerText = "장외시간: REST 현재가 표시중";
+      } else {
+        document.getElementById("status").innerText = "요약 정보 로드 완료";
       }
-
     } catch (e) {
       console.error(e);
       document.getElementById("status").innerText = "요약 정보 로드 실패";
@@ -117,13 +156,13 @@
   }
 
   // -----------------------------
-  // 2) REST로 현재가만 주기적으로 폴백
-  //    - 장외: 30~60초마다
-  //    - 장중: WS가 N초 이상 무응답이면 1회 폴백
+  // 2) REST로 현재가 폴백
   // -----------------------------
   async function fetchRestPriceCooldown(cooldownMs) {
+    if (!CODE) return;
+
     const now = Date.now();
-    if (now - lastRestPriceAt < cooldownMs) return; // 쿨다운
+    if (now - lastRestPriceAt < cooldownMs) return;
     lastRestPriceAt = now;
 
     try {
@@ -135,15 +174,13 @@
       if (Number.isFinite(cur)) {
         restCurrentNum = cur;
 
-        // 장외는 무조건 REST로 표시
         if (!isMarketHoursKST()) {
           setPriceDisplay(cur);
           updateRate(cur);
           document.getElementById("status").innerText = "장외시간: REST 현재가 표시중";
         } else {
-          // 장중 폴백: WS가 안 오면 REST로 임시 표시
           const silentMs = now - lastWsAt;
-          if (silentMs > 15_000) { // 15초 이상 WS 무응답이면
+          if (silentMs > 15_000) {
             setPriceDisplay(cur);
             updateRate(cur);
             document.getElementById("status").innerText = "WS 무응답: REST로 임시 표시중";
@@ -152,74 +189,187 @@
       }
     } catch (e) {
       console.error(e);
-      // 장외인데 REST도 실패하면 상태만 표시
       if (!isMarketHoursKST()) {
         document.getElementById("status").innerText = "장외시간: REST 현재가 조회 실패";
       }
     }
   }
 
-  // 페이지 진입시 1회 summary 로드
-  loadSummaryAndMaybeRestPrice();
+  // -----------------------------
+  // 3) WebSocket 연결/구독 관리
+  // -----------------------------
+  function connectWsIfNeeded() {
+    // 이미 연결돼 있으면 재사용
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
 
-  // 장외 폴백 폴링(예: 60초)
+    wsReady = false;
+    ws = new WebSocket(
+      (location.protocol === "https:" ? "wss://" : "ws://") +
+      location.host +
+      "/ws/stock"
+    );
+
+    ws.onopen = () => {
+      wsReady = true;
+      if (!CODE) {
+        document.getElementById("status").innerText = "WS 연결됨 (종목 선택 대기중)";
+        return;
+      }
+
+      if (isMarketHoursKST()) {
+        document.getElementById("status").innerText = "장중: WS 연결됨. 구독 요청 전송...";
+        ws.send(JSON.stringify({ type: "SUBSCRIBE", code: CODE }));
+      } else {
+        document.getElementById("status").innerText = "장외: REST 현재가 사용 (WS 구독 안함)";
+      }
+    };
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.type === "PRICE") {
+        // (선택) 서버가 code를 같이 내려주면, 다른 종목 메시지 걸러낼 수 있음
+        // if (msg.code && msg.code !== CODE) return;
+
+        const priceNum = toNum(msg.price);
+        lastWsAt = Date.now();
+
+        if (Number.isFinite(priceNum)) {
+          setPriceDisplay(priceNum);
+          updateRate(priceNum);
+          document.getElementById("status").innerText = "장중: WS 실시간 수신중";
+        }
+      } else if (msg.type === "ERROR") {
+        document.getElementById("status").innerText = "WS 에러: " + msg.message;
+      }
+    };
+
+    ws.onclose = () => {
+      wsReady = false;
+      if (!CODE) {
+        document.getElementById("status").innerText = "WS 종료 (종목 선택 대기중)";
+      } else if (!isMarketHoursKST()) {
+        document.getElementById("status").innerText = "장외: REST 현재가 표시중";
+      } else {
+        document.getElementById("status").innerText = "장중: WS 연결 종료 (REST 폴백 시도중)";
+      }
+    };
+  }
+
+  function subscribeSelectedStock() {
+    if (!CODE) return;
+
+    // 장중이면 WS 구독
+    connectWsIfNeeded();
+
+    if (isMarketHoursKST()) {
+      // ws가 OPEN 되기 전에 보내면 실패할 수 있으니, OPEN 상태면 즉시 / 아니면 onopen에서 처리
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "SUBSCRIBE", code: CODE }));
+      }
+    }
+  }
+
+  // -----------------------------
+  // ✅ 종목 선택 시 “전체 흐름 재시작”
+  // -----------------------------
+  async function selectStock(name, code) {
+    NAME = name;
+    CODE = code;
+
+    setTitle();
+    resetNumbers();
+    document.getElementById("status").innerText = "종목 변경됨: 데이터 로딩중...";
+
+    await loadSummaryAndMaybeRestPrice();
+    subscribeSelectedStock();
+  }
+
+  // -----------------------------
+  // ✅ 검색 API 호출 + 결과 표시
+  // -----------------------------
+  let searchTimer = null;
+
+  async function searchStocks(keyword) {
+    const box = document.getElementById("searchBox");
+    box.innerHTML = "";
+    box.style.display = "none";
+
+    const q = (keyword || "").trim();
+    if (q.length < 1) return;
+
+    try {
+      // ✅ 백엔드에서 구현할 검색 API
+      const res = await fetch(`/api/stocks/search?keyword=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error("search fetch failed");
+      const list = await res.json(); // [{code,name},...]
+
+      if (!Array.isArray(list) || list.length === 0) {
+        box.style.display = "block";
+        box.innerHTML = `<div class="list-group-item text-muted">검색 결과가 없습니다.</div>`;
+        return;
+      }
+
+      box.style.display = "block";
+      list.slice(0, 10).forEach(item => {
+        const a = document.createElement("button");
+        a.type = "button";
+        a.className = "list-group-item list-group-item-action";
+        a.innerText = `${item.name} (${item.code})`;
+        a.onclick = () => {
+          box.style.display = "none";
+          document.getElementById("stockInput").value = item.name;
+          selectStock(item.name, item.code);
+        };
+        box.appendChild(a);
+      });
+
+    } catch (e) {
+      console.error(e);
+      box.style.display = "block";
+      box.innerHTML = `<div class="list-group-item text-danger">검색 실패 (서버 API 확인 필요)</div>`;
+    }
+  }
+
+  // 입력 이벤트(디바운스)
+  const inputEl = document.getElementById("stockInput");
+  inputEl.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => searchStocks(inputEl.value), 250);
+  });
+
+  // 검색 버튼
+  document.getElementById("searchBtn").addEventListener("click", () => {
+    searchStocks(inputEl.value);
+  });
+
+  // Enter로 검색
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      searchStocks(inputEl.value);
+    }
+  });
+
+  // -----------------------------
+  // ✅ 폴백 타이머는 그대로 유지하되, CODE 있을 때만 동작
+  // -----------------------------
   setInterval(() => {
-    if (!isMarketHoursKST()) {
-      fetchRestPriceCooldown(30_000); // 30초 쿨다운
+    if (CODE && !isMarketHoursKST()) {
+      fetchRestPriceCooldown(30_000);
     }
   }, 60_000);
 
-  // 장중 WS 무응답 폴백 체크(예: 5초마다)
   setInterval(() => {
-    if (isMarketHoursKST()) {
-      fetchRestPriceCooldown(30_000); // 장중에도 REST 남발 방지
+    if (CODE && isMarketHoursKST()) {
+      fetchRestPriceCooldown(30_000);
     }
   }, 5_000);
 
-  // -----------------------------
-  // 3) WebSocket 연결 (장중이면 SUBSCRIBE)
-  // -----------------------------
-  const ws = new WebSocket(
-    (location.protocol === "https:" ? "wss://" : "ws://") +
-      location.host +
-      "/ws/stock"
-  );
+  // 최초 WS 연결은 해두되(선택사항), 종목 선택 전엔 구독 안 함
+  connectWsIfNeeded();
 
-  ws.onopen = () => {
-    if (isMarketHoursKST()) {
-      document.getElementById("status").innerText = "장중: WS 연결됨. 구독 요청 전송...";
-      ws.send(JSON.stringify({ type: "SUBSCRIBE", code: CODE }));
-    } else {
-      document.getElementById("status").innerText = "장외: REST 현재가 사용 (WS 구독 안함)";
-      // 굳이 구독할 필요 없음 (원하면 주석 해제 가능)
-      // ws.send(JSON.stringify({ type: "SUBSCRIBE", code: CODE }));
-    }
-  };
-
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-
-    if (msg.type === "PRICE") {
-      const priceNum = toNum(msg.price);
-      lastWsAt = Date.now();
-
-      if (Number.isFinite(priceNum)) {
-        setPriceDisplay(priceNum);
-        updateRate(priceNum);
-        document.getElementById("status").innerText = "장중: WS 실시간 수신중";
-      }
-    } else if (msg.type === "ERROR") {
-      document.getElementById("status").innerText = "WS 에러: " + msg.message;
-    }
-  };
-
-  ws.onclose = () => {
-    // 장외면 WS 끊겨도 상관 없음
-    if (!isMarketHoursKST()) {
-      document.getElementById("status").innerText = "장외: REST 현재가 표시중";
-    } else {
-      document.getElementById("status").innerText = "장중: WS 연결 종료 (REST 폴백 시도중)";
-    }
-  };
 </script>
 </html>
