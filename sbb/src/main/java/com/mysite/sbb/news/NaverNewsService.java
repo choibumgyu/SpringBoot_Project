@@ -28,9 +28,11 @@ public class NaverNewsService {
 
     // 네이버 title/description에 섞여 오는 <b>...</b> 제거용
     private static final Pattern HTML_TAG = Pattern.compile("<[^>]*>");
+    
+    private static final int MIN_NEWS = 3;
 
     public List<NaverNewsResponse.NaverNewsItem> searchNews(String keyword, int display) {
-        int safeDisplay = Math.max(1, Math.min(display, 100));
+        int safeDisplay = Math.max(1, Math.min(display, 30));
 
         // ✅ query는 넓게 가져오고, 필터로 품질을 보장하는 방식이 안정적
         String refined = "\"" + keyword.trim() + "\"";
@@ -52,37 +54,60 @@ public class NaverNewsService {
 
         List<NaverNewsResponse.NaverNewsItem> items =
                 (res == null || res.items() == null) ? List.of() : res.items();
+        List<NaverNewsResponse.NaverNewsItem> filtered = filterItemsWithFallback(items, keyword);
 
-        return filterItems(items, keyword);
+        // 최종 반환은 display 개수만
+        return filtered.stream().limit(safeDisplay).toList();
     }
 
-    private List<NaverNewsResponse.NaverNewsItem> filterItems(
+    private List<NaverNewsResponse.NaverNewsItem> filterItemsWithFallback(
             List<NaverNewsResponse.NaverNewsItem> items, String keyword) {
 
         String kw = normalize(keyword);
 
-        return items.stream()
+        // 1) 엄격
+        List<NaverNewsResponse.NaverNewsItem> strict = items.stream()
                 .filter(it -> {
                     String title = normalize(it.title());
                     String content = normalize((it.title() == null ? "" : it.title())
                             + " " + (it.description() == null ? "" : it.description()));
-
-                    // 조건 1) 제목에 종목명 포함
-                    boolean titleHasKeyword = title.contains(kw);
-
-                    // 조건 2) 내용(제목+요약)에 주식 컨텍스트 포함
-                    boolean hasContext = STOCK_CONTEXT.matcher(content).find();
-
-                    return titleHasKeyword && hasContext;
+                    return title.contains(kw) && STOCK_CONTEXT.matcher(content).find();
                 })
                 .toList();
+
+        if (strict.size() >= MIN_NEWS) return strict;
+
+        // 2) 완화: title OR description에 종목명 + 컨텍스트
+        List<NaverNewsResponse.NaverNewsItem> relaxed1 = items.stream()
+                .filter(it -> {
+                    String title = normalize(it.title());
+                    String desc = normalize(it.description());
+                    String content = normalize((it.title() == null ? "" : it.title())
+                            + " " + (it.description() == null ? "" : it.description()));
+
+                    boolean hasKeywordSomewhere = title.contains(kw) || desc.contains(kw);
+                    boolean hasContext = STOCK_CONTEXT.matcher(content).find();
+                    return hasKeywordSomewhere && hasContext;
+                })
+                .toList();
+
+        if (relaxed1.size() >= MIN_NEWS) return relaxed1;
+
+        // 3) 최후 완화: title OR description에 종목명만
+        List<NaverNewsResponse.NaverNewsItem> relaxed2 = items.stream()
+                .filter(it -> {
+                    String title = normalize(it.title());
+                    String desc = normalize(it.description());
+                    return title.contains(kw) || desc.contains(kw);
+                })
+                .toList();
+
+        return relaxed2;
     }
 
     private String normalize(String s) {
         if (s == null) return "";
-        // HTML 태그 제거 (<b> 등)
         String noHtml = HTML_TAG.matcher(s).replaceAll("");
-        // 소문자/공백 정리
         return noHtml.toLowerCase(Locale.ROOT).trim();
     }
 }

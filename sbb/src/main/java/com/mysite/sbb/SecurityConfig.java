@@ -53,7 +53,8 @@ public class SecurityConfig {
                         new AntPathRequestMatcher("/h2-console/**"),
                         new AntPathRequestMatcher("/stock"),
                         new AntPathRequestMatcher("/api/stocks/**"), // ✅ 추가: search/summary 등
-                        new AntPathRequestMatcher("/ws/**")
+                        new AntPathRequestMatcher("/ws/**"),
+                        new AntPathRequestMatcher("/api/news/**")
                 ).permitAll()
 
                 .anyRequest().authenticated()
