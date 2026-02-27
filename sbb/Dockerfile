@@ -2,6 +2,7 @@
 FROM eclipse-temurin:21-jdk AS builder
 WORKDIR /app
 COPY . .
+WORKDIR /app/sbb
 RUN chmod +x ./gradlew
 RUN ./gradlew clean bootJar -x test
 
