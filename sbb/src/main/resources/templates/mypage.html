@@ -16,7 +16,27 @@
 
 
     <h2 class="mypage-title" th:text="${name} + '님의 마이페이지'"></h2>
+	
+	
+	<div style="text-align:center; margin: 20px 0;">
+	    <div>
+	        <img th:if="${profileImageUrl != null}"
+	             th:src="${profileImageUrl}"
+	             alt="profile"
+	             style="width:160px; height:160px; border-radius:50%; object-fit:cover; border:1px solid #ddd;" />
 
+	        <div th:if="${profileImageUrl == null}"
+	             style="width:160px; height:160px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; border:1px solid #ddd; color:#999;">
+	            No Image
+	        </div>
+	    </div>
+
+	    <!-- 업로드 폼 -->
+	    <form th:action="@{/user/mypage/profile-image}" method="post" enctype="multipart/form-data" style="margin-top: 12px;">
+	        <input type="file" name="profileImage" accept="image/*" required />
+	        <button type="submit" class="btn btn-sm btn-primary">등록</button>
+	    </form>
+	</div>
     <h3>내 질문</h3>
     <ul>
         <li th:each="question : ${questions}">

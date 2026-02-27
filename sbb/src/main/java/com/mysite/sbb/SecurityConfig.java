@@ -2,6 +2,7 @@ package com.mysite.sbb;
 
 import com.mysite.sbb.user.CustomOAuth2UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,9 +24,11 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final CustomOAuth2UserService customOAuth2UserService;
+    // ✅ local에서도 SecurityConfig는 생성되므로, OAuth2 관련 빈을 “필요할 때만” 꺼내도록 변경
+    private final ObjectProvider<CustomOAuth2UserService> customOAuth2UserServiceProvider;
 
     private void common(HttpSecurity http) throws Exception {
+
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
                 .requestMatchers(
@@ -42,15 +45,29 @@ public class SecurityConfig {
                         new AntPathRequestMatcher("/**/*.ttf"),
                         new AntPathRequestMatcher("/webjars/**")
                 ).permitAll()
+
+                // ✅ 공개 페이지
                 .requestMatchers(
                         new AntPathRequestMatcher("/"),
                         new AntPathRequestMatcher("/user/**"),
-                        new AntPathRequestMatcher("/h2-console/**")
+                        new AntPathRequestMatcher("/h2-console/**"),
+                        new AntPathRequestMatcher("/stock"),
+                        new AntPathRequestMatcher("/api/stocks/**"), // ✅ 추가: search/summary 등
+                        new AntPathRequestMatcher("/ws/**"),
+                        new AntPathRequestMatcher("/api/news/**")
                 ).permitAll()
+
                 .anyRequest().authenticated()
         );
 
-        http.csrf(csrf -> csrf.ignoringRequestMatchers(new AntPathRequestMatcher("/h2-console/**")));
+        http.csrf(csrf -> csrf
+                .ignoringRequestMatchers(
+                        new AntPathRequestMatcher("/h2-console/**"),
+                        new AntPathRequestMatcher("/ws/**"),
+                        new AntPathRequestMatcher("/api/stock-briefing")
+                )
+        );
+
         http.headers(headers -> headers.addHeaderWriter(
                 new XFrameOptionsHeaderWriter(XFrameOptionsHeaderWriter.XFrameOptionsMode.SAMEORIGIN)
         ));
@@ -71,7 +88,6 @@ public class SecurityConfig {
     @Profile("local")
     SecurityFilterChain localFilterChain(HttpSecurity http) throws Exception {
         common(http);
-        // ✅ local에서는 OAuth2 관련 설정을 “아예 호출하지 않는다”
         return http.build();
     }
 
@@ -80,11 +96,14 @@ public class SecurityConfig {
     SecurityFilterChain prodFilterChain(HttpSecurity http) throws Exception {
         common(http);
 
-        http.oauth2Login(oauth2 -> oauth2
-                .loginPage("/user/login")
-                .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
-                .defaultSuccessUrl("/", true)
-        );
+        CustomOAuth2UserService customOAuth2UserService = customOAuth2UserServiceProvider.getIfAvailable();
+        if (customOAuth2UserService != null) {
+            http.oauth2Login(oauth2 -> oauth2
+                    .loginPage("/user/login")
+                    .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
+                    .defaultSuccessUrl("/", true)
+            );
+        }
 
         return http.build();
     }

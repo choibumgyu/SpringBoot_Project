@@ -1,0 +1,699 @@
+<html layout:decorate="~{layout}">
+<div layout:fragment="content" class="container my-3">
+
+  <h3 class="mb-3" id="title">종목을 검색하세요</h3>
+
+  <!-- ✅ 검색창 -->
+  <div class="mb-3">
+    <div class="input-group">
+      <input id="stockInput" type="text" class="form-control" placeholder="예: 삼성전자"
+             autocomplete="off">
+      <button id="searchBtn" class="btn btn-primary" type="button">검색</button>
+    </div>
+
+    <!-- 검색 결과 리스트 -->
+    <div id="searchBox" class="list-group mt-2" style="display:none;"></div>
+
+    <div class="form-text text-muted mt-1">
+      종목명을 입력하고 결과를 클릭하면 해당 종목으로 조회합니다.
+    </div>
+  </div>
+
+  <div class="card p-3">
+    <div class="mb-2">
+      <span class="text-muted">전일 종가</span> :
+      <strong id="prevClose">-</strong>
+    </div>
+
+    <div class="mb-2">
+      <span class="text-muted">등락률</span> :
+      <strong id="rate">-</strong>
+    </div>
+
+    <hr>
+
+    <div>현재가:</div>
+    <div id="price" style="font-size: 2rem; font-weight: 700;">-</div>
+    <div id="status" class="text-muted mt-2">종목을 선택해 주세요.</div>
+  </div>
+  <!-- ✅ 관련 뉴스 카드 -->
+  <div class="card p-3 mt-4">
+    <h5 class="mb-3">관련 뉴스</h5>
+
+    <!-- JS가 채울 영역 -->
+    <div id="newsStatus" class="text-muted">종목을 선택하면 뉴스를 불러옵니다.</div>
+    <ul id="newsList" class="list-group list-group-flush mt-2"></ul>
+  </div>
+  <!-- ✅ AI 브리핑 카드 -->
+  <!-- ✅ AI 브리핑 카드 (업그레이드) -->
+  <div class="card p-3 mt-4 shadow-sm">
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center gap-2">
+        <h5 class="mb-0">AI 브리핑</h5>
+        <span id="briefBadge" class="badge text-bg-secondary" style="display:none;"></span>
+      </div>
+
+      <button id="briefBtn" class="btn btn-outline-primary btn-sm" type="button" disabled>
+        브리핑 생성
+      </button>
+    </div>
+
+    <div id="briefStatus" class="text-muted mt-2">
+      종목을 선택하면 브리핑을 생성할 수 있습니다.
+    </div>
+
+    <!-- 로딩 스피너 -->
+    <div id="briefLoading" class="mt-3" style="display:none;">
+      <div class="d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+        <div class="text-muted">브리핑 생성 중...</div>
+      </div>
+    </div>
+
+    <div id="briefingBox" class="mt-3" style="display:none;">
+      <!-- ✅ 3줄 요약 섹션 -->
+      <div class="mb-3">
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="fw-semibold">3줄 요약</div>
+          <small class="text-muted" id="briefUpdatedAt"></small>
+        </div>
+        <div class="border rounded p-3 mt-2 bg-light">
+          <ul id="briefSummary" class="mb-0"></ul>
+        </div>
+      </div>
+
+      <!-- ✅ 호재/악재/체크 포인트: 3단 그리드 -->
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div class="fw-semibold">호재</div>
+              <span class="badge text-bg-success">상승요인</span>
+            </div>
+            <ul id="briefBull" class="mb-0"></ul>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div class="fw-semibold">악재</div>
+              <span class="badge text-bg-danger">하락요인</span>
+            </div>
+            <ul id="briefBear" class="mb-0"></ul>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="border rounded p-3 h-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div class="fw-semibold">체크 포인트</div>
+            </div>
+            <ul id="briefWatch" class="mb-0"></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- ✅ confidence 시각화 -->
+      <div class="mt-4">
+        <div class="d-flex justify-content-between">
+          <small class="text-muted">브리핑 신뢰도</small>
+          <small class="text-muted" id="briefConfidenceText">-</small>
+        </div>
+        <div class="progress mt-1" style="height: 10px;">
+          <div id="briefConfidenceBar" class="progress-bar" role="progressbar"
+               style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script layout:fragment="script" type="text/javascript">
+  // ✅ 선택된 종목 정보(동적으로 바뀜)
+  let CODE = null;
+  let NAME = null;
+
+  // 전일 종가 숫자값 저장용
+  let prevCloseNum = null;
+
+  // REST로 가져온 "현재가" 저장(장외 폴백용)
+  let restCurrentNum = null;
+
+  // WS 마지막 수신 시각(장중 폴백 판단용)
+  let lastWsAt = 0;
+
+  // REST 폴백 호출 쿨다운(서버 부하 방지)
+  let lastRestPriceAt = 0;
+
+  // ✅ WS 객체(종목 바뀔 때 재구독/재생성)
+  let ws = null;
+  let wsReady = false;
+  
+  // ✅ AI 브리핑 입력용 데이터(프론트에서 수집)
+  let latestNews = [];      // [{title, description, link}]
+  let latestCurrentNum = null;  // 화면에 표시되는 최종 현재가(WS/REST 반영)
+
+  // ✅ 브리핑 버튼 활성화 조건 체크
+  function canBrief() {
+    // NAME은 종목명, prevCloseNum은 전일종가
+    return !!NAME
+      && Number.isFinite(prevCloseNum)
+      && Number.isFinite(latestCurrentNum)
+      && Array.isArray(latestNews) && latestNews.length > 0;
+  }
+
+  let briefingInFlight = false;
+  
+  function updateBriefBtn() {
+    const btn = document.getElementById("briefBtn");
+	if (briefingInFlight) {
+	    btn.disabled = true;
+	    return;
+	  }
+	  btn.disabled = !canBrief();
+    const ok = canBrief();
+    btn.disabled = !ok;
+    if (!ok) {
+      document.getElementById("briefStatus").innerText = "데이터 로딩 중... (가격/뉴스 로드 후 활성화)";
+    } else {
+      document.getElementById("briefStatus").innerText = "브리핑을 생성할 수 있습니다.";
+    }
+  }
+
+  // -----------------------------
+  // 시간 판정: 한국시간 기준 장중(09:00~15:30)
+  // -----------------------------
+  function isMarketHoursKST() {
+    const now = new Date();
+    const day = now.getDay(); // 0=일, 6=토
+    if (day === 0 || day === 6) return false;
+
+    const hh = now.getHours();
+    const mm = now.getMinutes();
+    const t = hh * 60 + mm;
+
+    const open = 9 * 60;        // 09:00
+    const close = 15 * 60 + 30; // 15:30
+    return t >= open && t <= close;
+  }
+
+  function toNum(v) {
+    if (v == null) return NaN;
+    const raw = v.toString().replaceAll(",", "").trim();
+    return Number(raw);
+  }
+
+  function setPriceDisplay(nOrText) {
+    const el = document.getElementById("price");
+    if (typeof nOrText === "number" && Number.isFinite(nOrText)) {
+      el.innerText = nOrText.toLocaleString();
+    } else {
+      el.innerText = nOrText ?? "-";
+    }
+	 latestCurrentNum = nOrText;
+	 updateBriefBtn();
+  }
+
+  function updateRate(currentPriceNum) {
+    const rateEl = document.getElementById("rate");
+    if (!prevCloseNum || !Number.isFinite(currentPriceNum)) {
+      rateEl.innerText = "-";
+      rateEl.style.color = "";
+      return;
+    }
+
+    const rate = ((currentPriceNum - prevCloseNum) / prevCloseNum) * 100;
+    rateEl.innerText = rate.toFixed(2) + "%";
+
+    if (rate > 0) rateEl.style.color = "red";
+    else if (rate < 0) rateEl.style.color = "blue";
+    else rateEl.style.color = "";
+  }
+
+  function resetNumbers() {
+    prevCloseNum = null;
+    restCurrentNum = null;
+    lastWsAt = 0;
+    lastRestPriceAt = 0;
+    document.getElementById("prevClose").innerText = "-";
+    document.getElementById("rate").innerText = "-";
+    document.getElementById("rate").style.color = "";
+    setPriceDisplay("-");
+  }
+
+  function setTitle() {
+    const titleEl = document.getElementById("title");
+    if (NAME && CODE) titleEl.innerText = `${NAME}(${CODE})`;
+    else titleEl.innerText = "종목을 검색하세요";
+  }
+
+  // -----------------------------
+  // 1) Summary(전일종가 + REST현재가) 로드
+  // -----------------------------
+  async function loadSummaryAndMaybeRestPrice() {
+    if (!CODE) return;
+
+    try {
+      const res = await fetch(`/api/stocks/${CODE}/summary`);
+      if (!res.ok) throw new Error("summary fetch failed");
+      const data = await res.json();
+
+      document.getElementById("prevClose").innerText = data.prevClose || "-";
+      const pc = toNum(data.prevClose);
+      prevCloseNum = Number.isFinite(pc) && pc > 0 ? pc : null;
+	  
+	  updateBriefBtn();
+
+      const cur = toNum(data.current);
+      restCurrentNum = Number.isFinite(cur) ? cur : null;
+
+      if (!isMarketHoursKST() && restCurrentNum != null) {
+        setPriceDisplay(restCurrentNum);
+        updateRate(restCurrentNum);
+        document.getElementById("status").innerText = "장외시간: REST 현재가 표시중";
+      } else {
+        document.getElementById("status").innerText = "요약 정보 로드 완료";
+      }
+    } catch (e) {
+      console.error(e);
+      document.getElementById("status").innerText = "요약 정보 로드 실패";
+    }
+  }
+
+  // -----------------------------
+  // 2) REST로 현재가 폴백
+  // -----------------------------
+  async function fetchRestPriceCooldown(cooldownMs) {
+    if (!CODE) return;
+
+    const now = Date.now();
+    if (now - lastRestPriceAt < cooldownMs) return;
+    lastRestPriceAt = now;
+
+    try {
+      const res = await fetch(`/api/stocks/${CODE}/summary`);
+      if (!res.ok) throw new Error("rest price fetch failed");
+      const data = await res.json();
+
+      const cur = toNum(data.current);
+      if (Number.isFinite(cur)) {
+        restCurrentNum = cur;
+
+        if (!isMarketHoursKST()) {
+          setPriceDisplay(cur);
+          updateRate(cur);
+          document.getElementById("status").innerText = "장외시간: REST 현재가 표시중";
+        } else {
+          const silentMs = now - lastWsAt;
+          if (silentMs > 15_000) {
+            setPriceDisplay(cur);
+            updateRate(cur);
+            document.getElementById("status").innerText = "WS 무응답: REST로 임시 표시중";
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      if (!isMarketHoursKST()) {
+        document.getElementById("status").innerText = "장외시간: REST 현재가 조회 실패";
+      }
+    }
+  }
+
+  // -----------------------------
+  // 3) WebSocket 연결/구독 관리
+  // -----------------------------
+  function connectWsIfNeeded() {
+    // 이미 연결돼 있으면 재사용
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    wsReady = false;
+    ws = new WebSocket(
+      (location.protocol === "https:" ? "wss://" : "ws://") +
+      location.host +
+      "/ws/stock"
+    );
+
+    ws.onopen = () => {
+      wsReady = true;
+      if (!CODE) {
+        document.getElementById("status").innerText = "WS 연결됨 (종목 선택 대기중)";
+        return;
+      }
+
+      if (isMarketHoursKST()) {
+        document.getElementById("status").innerText = "장중: WS 연결됨. 구독 요청 전송...";
+        ws.send(JSON.stringify({ type: "SUBSCRIBE", code: CODE }));
+      } else {
+        document.getElementById("status").innerText = "장외: REST 현재가 사용 (WS 구독 안함)";
+      }
+    };
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.type === "PRICE") {
+        // (선택) 서버가 code를 같이 내려주면, 다른 종목 메시지 걸러낼 수 있음
+        // if (msg.code && msg.code !== CODE) return;
+
+        const priceNum = toNum(msg.price);
+        lastWsAt = Date.now();
+
+        if (Number.isFinite(priceNum)) {
+          setPriceDisplay(priceNum);
+          updateRate(priceNum);
+          document.getElementById("status").innerText = "장중: WS 실시간 수신중";
+        }
+      } else if (msg.type === "ERROR") {
+        document.getElementById("status").innerText = "WS 에러: " + msg.message;
+      }
+    };
+
+    ws.onclose = () => {
+      wsReady = false;
+      if (!CODE) {
+        document.getElementById("status").innerText = "WS 종료 (종목 선택 대기중)";
+      } else if (!isMarketHoursKST()) {
+        document.getElementById("status").innerText = "장외: REST 현재가 표시중";
+      } else {
+        document.getElementById("status").innerText = "장중: WS 연결 종료 (REST 폴백 시도중)";
+      }
+    };
+  }
+
+  function subscribeSelectedStock() {
+    if (!CODE) return;
+
+    // 장중이면 WS 구독
+    connectWsIfNeeded();
+
+    if (isMarketHoursKST()) {
+      // ws가 OPEN 되기 전에 보내면 실패할 수 있으니, OPEN 상태면 즉시 / 아니면 onopen에서 처리
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "SUBSCRIBE", code: CODE }));
+      }
+    }
+  }
+  function clearNewsUI(msg) {
+    document.getElementById("newsStatus").innerText = msg || "";
+    document.getElementById("newsList").innerHTML = "";
+  }
+
+  // 네이버 title에는 <b>...</b>가 포함될 수 있어 innerHTML 사용
+  function renderNews(items) {
+    const ul = document.getElementById("newsList");
+    ul.innerHTML = "";
+
+    if (!items || items.length === 0) {
+      document.getElementById("newsStatus").innerText = "관련 뉴스가 없습니다.";
+      return;
+    }
+
+    document.getElementById("newsStatus").innerText = "";
+
+    items.slice(0, 10).forEach(n => {
+      const li = document.createElement("li");
+      li.className = "list-group-item px-0";
+
+      const a = document.createElement("a");
+      a.href = n.link;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.className = "fw-semibold text-decoration-none";
+      a.innerHTML = n.title; // <b>키워드</b> 강조를 살림
+
+      const date = document.createElement("div");
+      date.className = "small text-muted mt-1";
+      date.innerText = n.pubDate || "";
+
+      li.appendChild(a);
+      li.appendChild(date);
+      ul.appendChild(li);
+    });
+  }
+
+  async function loadNewsByKeyword(keyword) {
+    const q = (keyword || "").trim();
+    if (!q) return;
+
+    clearNewsUI("관련 뉴스 불러오는 중...");
+
+    try {
+      const res = await fetch(`/api/news?keyword=${encodeURIComponent(q)}&display=100`);
+      if (!res.ok) throw new Error("news fetch failed");
+
+      const items = await res.json();
+	  latestNews = (items || []).slice(0, 5).map(it => ({
+	       title: it.title || "",
+	       description: it.description || "",
+	       link: it.link || ""
+	     }));
+	     updateBriefBtn();
+      renderNews(items);
+    } catch (e) {
+      console.error(e);
+	  latestNews = [];
+	  updateBriefBtn();
+      clearNewsUI("뉴스 조회 실패 (서버/키 설정 확인 필요)");
+    }
+  }
+
+  // -----------------------------
+  // ✅ 종목 선택 시 “전체 흐름 재시작”
+  // -----------------------------
+  async function selectStock(name, code) {
+    NAME = name;
+    CODE = code;
+
+    setTitle();
+    resetNumbers();
+    document.getElementById("status").innerText = "종목 변경됨: 데이터 로딩중...";
+	document.getElementById("briefingBox").style.display = "none";
+	document.getElementById("briefStatus").innerText = "데이터 로딩 중... (가격/뉴스 로드 후 활성화)";
+	latestNews = [];
+	latestCurrentNum = null;
+	updateBriefBtn();
+
+    await loadSummaryAndMaybeRestPrice();
+    subscribeSelectedStock();
+	
+	await loadNewsByKeyword(NAME);
+  }
+
+  // -----------------------------
+  // ✅ 검색 API 호출 + 결과 표시
+  // -----------------------------
+  let searchTimer = null;
+
+  async function searchStocks(keyword) {
+    const box = document.getElementById("searchBox");
+    box.innerHTML = "";
+    box.style.display = "none";
+
+    const q = (keyword || "").trim();
+    if (q.length < 1) return;
+
+    try {
+      // ✅ 백엔드에서 구현할 검색 API
+      const res = await fetch(`/api/stocks/search?keyword=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error("search fetch failed");
+      const list = await res.json(); // [{code,name},...]
+
+      if (!Array.isArray(list) || list.length === 0) {
+        box.style.display = "block";
+        box.innerHTML = `<div class="list-group-item text-muted">검색 결과가 없습니다.</div>`;
+        return;
+      }
+
+      box.style.display = "block";
+      list.slice(0, 10).forEach(item => {
+        const a = document.createElement("button");
+        a.type = "button";
+        a.className = "list-group-item list-group-item-action";
+        a.innerText = `${item.name} (${item.code})`;
+        a.onclick = () => {
+          box.style.display = "none";
+          document.getElementById("stockInput").value = item.name;
+          selectStock(item.name, item.code);
+        };
+        box.appendChild(a);
+      });
+
+    } catch (e) {
+      console.error(e);
+      box.style.display = "block";
+      box.innerHTML = `<div class="list-group-item text-danger">검색 실패 (서버 API 확인 필요)</div>`;
+    }
+  }
+
+  // 입력 이벤트(디바운스)
+  const inputEl = document.getElementById("stockInput");
+  inputEl.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => searchStocks(inputEl.value), 250);
+  });
+
+  // 검색 버튼
+  document.getElementById("searchBtn").addEventListener("click", () => {
+    searchStocks(inputEl.value);
+  });
+
+  // Enter로 검색
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      searchStocks(inputEl.value);
+    }
+  });
+
+  // -----------------------------
+  // ✅ 폴백 타이머는 그대로 유지하되, CODE 있을 때만 동작
+  // -----------------------------
+  setInterval(() => {
+    if (CODE && !isMarketHoursKST()) {
+      fetchRestPriceCooldown(30_000);
+    }
+  }, 60_000);
+
+  setInterval(() => {
+    if (CODE && isMarketHoursKST()) {
+      fetchRestPriceCooldown(30_000);
+    }
+  }, 5_000);
+
+  // 최초 WS 연결은 해두되(선택사항), 종목 선택 전엔 구독 안 함
+  connectWsIfNeeded();
+  
+  document.getElementById("briefBtn").addEventListener("click", async () => {
+	  if (!canBrief() || briefingInFlight) return;
+
+	  briefingInFlight = true;
+	  setBriefLoading(true);
+	  updateBriefBtn();
+
+    const payload = {
+      stockName: NAME,
+      currentPrice: latestCurrentNum,
+      prevClose: prevCloseNum,
+      news: latestNews
+    };
+
+    try {
+		const csrfToken = document.querySelector('meta[name="_csrf"]')?.getAttribute('content');
+		const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.getAttribute('content');
+
+		const headers = { "Content-Type": "application/json" };
+		if (csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+      const res = await fetch("/api/stock-briefing", {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error("briefing failed");
+
+      const data = await res.json();
+      renderBriefing(data);
+      setBriefLoading(false);
+    } catch (e) {
+      console.error(e);
+      document.getElementById("briefStatus").innerText = "브리핑 생성 실패(잠시 후 재시도)";
+      setBriefLoading(false);
+    }
+	finally {
+	    briefingInFlight = false;
+	    setBriefLoading(false);
+	    updateBriefBtn();
+	  }
+  });
+
+  function setBriefLoading(isLoading) {
+    const btn = document.getElementById("briefBtn");
+    btn.disabled = isLoading;
+
+    document.getElementById("briefLoading").style.display = isLoading ? "block" : "none";
+    document.getElementById("briefStatus").innerText = isLoading ? "요약 생성 중..." : "";
+
+    if (isLoading) {
+      // 이전 결과 숨김(원하면 유지해도 됨)
+      document.getElementById("briefingBox").style.display = "none";
+    }
+  }
+
+  function renderBriefing(b) {
+    document.getElementById("briefLoading").style.display = "none";
+    document.getElementById("briefingBox").style.display = "block";
+
+    // 3줄 요약
+    document.getElementById("briefSummary").innerHTML =
+      (b.summary_3lines || []).map(s => `<li>${escapeHtml(s)}</li>`).join("");
+
+    // 섹션별 포인트
+    const bullArr = b.bull_points || [];
+    const bearArr = b.bear_points || [];
+    const watchArr = b.watch_points || [];
+
+    document.getElementById("briefBull").innerHTML =
+      bullArr.length
+        ? bullArr.map(x => `<li>${escapeHtml(x.point)}</li>`).join("")
+        : `<li class="text-muted">특별한 호재가 뚜렷하지 않습니다.</li>`;
+
+    document.getElementById("briefBear").innerHTML =
+      bearArr.length
+        ? bearArr.map(x => `<li>${escapeHtml(x.point)}</li>`).join("")
+        : `<li class="text-muted">특별한 악재가 뚜렷하지 않습니다.</li>`;
+
+    document.getElementById("briefWatch").innerHTML =
+      watchArr.length
+        ? watchArr.map(x => `<li>${escapeHtml(x.point)}</li>`).join("")
+        : `<li class="text-muted">추가로 확인할 포인트가 제한적입니다.</li>`;
+
+    // confidence
+    const conf = (typeof b.confidence === "number") ? b.confidence : null;
+    const pct = conf == null ? 0 : Math.max(0, Math.min(100, Math.round(conf * 100)));
+
+    document.getElementById("briefConfidenceText").innerText =
+      conf == null ? "-" : `${pct}%`;
+
+    const bar = document.getElementById("briefConfidenceBar");
+    bar.style.width = `${pct}%`;
+    bar.setAttribute("aria-valuenow", String(pct));
+
+    // 방향 배지(상승/하락) - 현재가/전일종가를 알고 있다면 붙이기
+    // 네 전역 변수(prevCloseNum, latestCurrentNum) 기준으로 표시
+    const badge = document.getElementById("briefBadge");
+    if (Number.isFinite(prevCloseNum) && Number.isFinite(latestCurrentNum)) {
+      if (latestCurrentNum > prevCloseNum) {
+        badge.className = "badge text-bg-success";
+        badge.innerText = "상승 흐름";
+        badge.style.display = "inline-block";
+      } else if (latestCurrentNum < prevCloseNum) {
+        badge.className = "badge text-bg-danger";
+        badge.innerText = "하락 흐름";
+        badge.style.display = "inline-block";
+      } else {
+        badge.className = "badge text-bg-secondary";
+        badge.innerText = "보합";
+        badge.style.display = "inline-block";
+      }
+    }
+
+    // 업데이트 시간
+    document.getElementById("briefUpdatedAt").innerText =
+      new Date().toLocaleString();
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+</script>
+</html>
