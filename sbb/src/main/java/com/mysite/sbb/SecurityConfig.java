@@ -63,7 +63,8 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf
                 .ignoringRequestMatchers(
                         new AntPathRequestMatcher("/h2-console/**"),
-                        new AntPathRequestMatcher("/ws/**")
+                        new AntPathRequestMatcher("/ws/**"),
+                        new AntPathRequestMatcher("/api/stock-briefing")
                 )
         );
 
