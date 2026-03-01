@@ -19,115 +19,123 @@
     </div>
   </div>
 
-  <div class="card p-3">
-    <div class="mb-2">
-      <span class="text-muted">전일 종가</span> :
-      <strong id="prevClose">-</strong>
+  <!-- ✅ 상단: 종목정보(좌) + AI브리핑(우) -->
+  <div class="row g-4">
+    <!-- ✅ 종목 정보 카드 (좌) -->
+    <div class="col-lg-4">
+      <div class="card p-3 h-100">
+        <div class="mb-2">
+          <span class="text-muted">전일 종가</span> :
+          <strong id="prevClose">-</strong>
+        </div>
+
+        <div class="mb-2">
+          <span class="text-muted">등락률</span> :
+          <strong id="rate">-</strong>
+        </div>
+
+        <hr>
+
+        <div class="text-muted">현재가</div>
+        <div id="price" style="font-size: 2rem; font-weight: 700;">-</div>
+
+        <div id="status" class="text-muted mt-2">종목을 선택해 주세요.</div>
+      </div>
     </div>
 
-    <div class="mb-2">
-      <span class="text-muted">등락률</span> :
-      <strong id="rate">-</strong>
+    <!-- ✅ AI 브리핑 카드 (우) -->
+    <div class="col-lg-8">
+      <div class="card p-3 h-100 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <h5 class="mb-0">AI 브리핑</h5>
+            <span id="briefBadge" class="badge text-bg-secondary" style="display:none;"></span>
+          </div>
+
+          <button id="briefBtn" class="btn btn-outline-primary btn-sm" type="button" disabled>
+            브리핑 생성
+          </button>
+        </div>
+
+        <div id="briefStatus" class="text-muted mt-2">
+          종목을 선택하면 브리핑을 생성할 수 있습니다.
+        </div>
+
+        <!-- 로딩 스피너 -->
+        <div id="briefLoading" class="mt-3" style="display:none;">
+          <div class="d-flex align-items-center gap-2">
+            <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+            <div class="text-muted">브리핑 생성 중...</div>
+          </div>
+        </div>
+
+        <div id="briefingBox" class="mt-3" style="display:none;">
+          <!-- ✅ 3줄 요약 섹션 -->
+          <div class="mb-3">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-semibold">3줄 요약</div>
+              <small class="text-muted" id="briefUpdatedAt"></small>
+            </div>
+            <div class="border rounded p-3 mt-2 bg-light">
+              <ul id="briefSummary" class="mb-0"></ul>
+            </div>
+          </div>
+
+          <!-- ✅ 호재/악재/체크 포인트 -->
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div class="border rounded p-3 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="fw-semibold">호재</div>
+                  <span class="badge text-bg-success">상승요인</span>
+                </div>
+                <ul id="briefBull" class="mb-0"></ul>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="border rounded p-3 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="fw-semibold">악재</div>
+                  <span class="badge text-bg-danger">하락요인</span>
+                </div>
+                <ul id="briefBear" class="mb-0"></ul>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="border rounded p-3 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="fw-semibold">체크 포인트</div>
+                </div>
+                <ul id="briefWatch" class="mb-0"></ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- ✅ confidence 시각화 -->
+          <div class="mt-4">
+            <div class="d-flex justify-content-between">
+              <small class="text-muted">브리핑 신뢰도</small>
+              <small class="text-muted" id="briefConfidenceText">-</small>
+            </div>
+            <div class="progress mt-1" style="height: 10px;">
+              <div id="briefConfidenceBar" class="progress-bar" role="progressbar"
+                   style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-
-    <hr>
-
-    <div>현재가:</div>
-    <div id="price" style="font-size: 2rem; font-weight: 700;">-</div>
-    <div id="status" class="text-muted mt-2">종목을 선택해 주세요.</div>
   </div>
-  <!-- ✅ 관련 뉴스 카드 -->
+
+  <!-- ✅ 관련 뉴스 카드 (아래로 이동) -->
   <div class="card p-3 mt-4">
     <h5 class="mb-3">관련 뉴스</h5>
 
-    <!-- JS가 채울 영역 -->
     <div id="newsStatus" class="text-muted">종목을 선택하면 뉴스를 불러옵니다.</div>
     <ul id="newsList" class="list-group list-group-flush mt-2"></ul>
   </div>
-  <!-- ✅ AI 브리핑 카드 -->
-  <!-- ✅ AI 브리핑 카드 (업그레이드) -->
-  <div class="card p-3 mt-4 shadow-sm">
-    <div class="d-flex justify-content-between align-items-center">
-      <div class="d-flex align-items-center gap-2">
-        <h5 class="mb-0">AI 브리핑</h5>
-        <span id="briefBadge" class="badge text-bg-secondary" style="display:none;"></span>
-      </div>
-
-      <button id="briefBtn" class="btn btn-outline-primary btn-sm" type="button" disabled>
-        브리핑 생성
-      </button>
-    </div>
-
-    <div id="briefStatus" class="text-muted mt-2">
-      종목을 선택하면 브리핑을 생성할 수 있습니다.
-    </div>
-
-    <!-- 로딩 스피너 -->
-    <div id="briefLoading" class="mt-3" style="display:none;">
-      <div class="d-flex align-items-center gap-2">
-        <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-        <div class="text-muted">브리핑 생성 중...</div>
-      </div>
-    </div>
-
-    <div id="briefingBox" class="mt-3" style="display:none;">
-      <!-- ✅ 3줄 요약 섹션 -->
-      <div class="mb-3">
-        <div class="d-flex align-items-center justify-content-between">
-          <div class="fw-semibold">3줄 요약</div>
-          <small class="text-muted" id="briefUpdatedAt"></small>
-        </div>
-        <div class="border rounded p-3 mt-2 bg-light">
-          <ul id="briefSummary" class="mb-0"></ul>
-        </div>
-      </div>
-
-      <!-- ✅ 호재/악재/체크 포인트: 3단 그리드 -->
-      <div class="row g-3">
-        <div class="col-md-4">
-          <div class="border rounded p-3 h-100">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">호재</div>
-              <span class="badge text-bg-success">상승요인</span>
-            </div>
-            <ul id="briefBull" class="mb-0"></ul>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <div class="border rounded p-3 h-100">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">악재</div>
-              <span class="badge text-bg-danger">하락요인</span>
-            </div>
-            <ul id="briefBear" class="mb-0"></ul>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <div class="border rounded p-3 h-100">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">체크 포인트</div>
-            </div>
-            <ul id="briefWatch" class="mb-0"></ul>
-          </div>
-        </div>
-      </div>
-
-      <!-- ✅ confidence 시각화 -->
-      <div class="mt-4">
-        <div class="d-flex justify-content-between">
-          <small class="text-muted">브리핑 신뢰도</small>
-          <small class="text-muted" id="briefConfidenceText">-</small>
-        </div>
-        <div class="progress mt-1" style="height: 10px;">
-          <div id="briefConfidenceBar" class="progress-bar" role="progressbar"
-               style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
 </div>
 
 <script layout:fragment="script" type="text/javascript">
