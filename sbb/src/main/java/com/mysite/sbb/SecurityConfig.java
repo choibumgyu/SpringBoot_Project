@@ -64,7 +64,8 @@ public class SecurityConfig {
                 .ignoringRequestMatchers(
                         new AntPathRequestMatcher("/h2-console/**"),
                         new AntPathRequestMatcher("/ws/**"),
-                        new AntPathRequestMatcher("/api/stock-briefing")
+                        new AntPathRequestMatcher("/api/stock-briefing"),
+                        new AntPathRequestMatcher("/api/stock-briefing/request")
                 )
         );
 
