@@ -28,6 +28,7 @@ public class SecurityConfig {
     private final ObjectProvider<CustomOAuth2UserService> customOAuth2UserServiceProvider;
 
     private void common(HttpSecurity http) throws Exception {
+    	System.out.println(">>> SecurityConfig.common() applied");
 
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
@@ -54,7 +55,10 @@ public class SecurityConfig {
                         new AntPathRequestMatcher("/stock"),
                         new AntPathRequestMatcher("/api/stocks/**"), // ✅ 추가: search/summary 등
                         new AntPathRequestMatcher("/ws/**"),
-                        new AntPathRequestMatcher("/api/news/**")
+                        new AntPathRequestMatcher("/api/news/**"),
+                        new AntPathRequestMatcher("/api/stock-briefing"),
+                        new AntPathRequestMatcher("/api/stock-briefing/request"),
+                        new AntPathRequestMatcher("/api/stock-briefing/*")
                 ).permitAll()
 
                 .anyRequest().authenticated()
@@ -63,9 +67,9 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf
                 .ignoringRequestMatchers(
                         new AntPathRequestMatcher("/h2-console/**"),
-                        new AntPathRequestMatcher("/ws/**"),
-                        new AntPathRequestMatcher("/api/stock-briefing"),
-                        new AntPathRequestMatcher("/api/stock-briefing/request")
+                        new AntPathRequestMatcher("/ws/**")
+                        //new AntPathRequestMatcher("/api/stock-briefing"),
+                        //new AntPathRequestMatcher("/api/stock-briefing/request")
                 )
         );
 
@@ -88,7 +92,14 @@ public class SecurityConfig {
     @Bean
     @Profile("local")
     SecurityFilterChain localFilterChain(HttpSecurity http) throws Exception {
-        common(http);
+        System.out.println(">>> localFilterChain created - OPEN MODE");
+
+        http
+            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+            .csrf(csrf -> csrf.disable())
+            .formLogin(form -> form.disable())
+            .logout(logout -> logout.disable());
+
         return http.build();
     }
 

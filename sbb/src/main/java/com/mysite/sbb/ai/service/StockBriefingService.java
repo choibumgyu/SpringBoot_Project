@@ -1,7 +1,11 @@
-package com.mysite.sbb.ai;
+package com.mysite.sbb.ai.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mysite.sbb.ai.GeminiClient;
+import com.mysite.sbb.ai.StockBriefingRequest;
+import com.mysite.sbb.ai.StockBriefingRequest.NewsItem;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
