@@ -3,6 +3,7 @@ package com.mysite.sbb.ai.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mysite.sbb.ai.StockBriefingRequest;
+import com.mysite.sbb.ai.dto.BriefingRequestStatusResponse;
 import com.mysite.sbb.ai.dto.BriefingRequestSubmitResponse;
 import com.mysite.sbb.ai.entity.BriefingRequest;
 import com.mysite.sbb.ai.entity.OutboxEvent;
@@ -69,6 +70,19 @@ public class BriefingRequestService {
         return new BriefingRequestSubmitResponse(
                 savedRequest.getId(),
                 savedRequest.getStatus()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public BriefingRequestStatusResponse getStatus(Long requestId) {
+        BriefingRequest briefingRequest = briefingRequestRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("BriefingRequest not found. id=" + requestId));
+
+        return new BriefingRequestStatusResponse(
+                briefingRequest.getId(),
+                briefingRequest.getStatus(),
+                briefingRequest.getResultPayload(),
+                briefingRequest.getErrorMessage()
         );
     }
 

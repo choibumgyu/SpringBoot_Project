@@ -76,21 +76,22 @@ public class BriefingRequest {
         this.updatedAt = updatedAt;
     }
 
-    public void markProcessing() {
+    public void markProcessing(LocalDateTime now) {
         this.status = BriefingStatus.PROCESSING;
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = now;
+        this.errorMessage = null;
     }
 
-    public void markDone(String resultPayload) {
-        this.status = BriefingStatus.DONE;
+    public void markCompleted(String resultPayload, LocalDateTime now) {
+        this.status = BriefingStatus.COMPLETED;
         this.resultPayload = resultPayload;
         this.errorMessage = null;
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = now;
     }
 
-    public void markFailed(String errorMessage) {
+    public void markFailed(String errorMessage, LocalDateTime now) {
         this.status = BriefingStatus.FAILED;
         this.errorMessage = errorMessage;
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = now;
     }
 }
