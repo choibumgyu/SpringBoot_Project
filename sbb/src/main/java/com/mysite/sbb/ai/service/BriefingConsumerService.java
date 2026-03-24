@@ -25,24 +25,26 @@ public class BriefingConsumerService {
 
     @Transactional
     public void consume(BriefingRequestedEventPayload eventPayload) {
-    	Long requestId = eventPayload.briefingRequestId();
 
-        BriefingRequest briefingRequest = briefingRequestRepository.findById(requestId)
-                .orElseThrow(() -> new IllegalArgumentException("BriefingRequest not found. id=" + requestId));
-
-        if (briefingRequest.getStatus() == BriefingStatus.COMPLETED) {
-            log.info("이미 완료된 요청입니다. requestId={}", requestId);
-            return;
-        }
-
-        if (briefingRequest.getStatus() == BriefingStatus.PROCESSING) {
-            log.info("이미 처리 중인 요청입니다. requestId={}", requestId);
-            return;
-        }
-
-        briefingRequest.markProcessing(LocalDateTime.now());
+        Long requestId = eventPayload.briefingRequestId();
+        BriefingRequest briefingRequest = null;
 
         try {
+            briefingRequest = briefingRequestRepository.findById(requestId)
+                    .orElseThrow(() -> new IllegalArgumentException("BriefingRequest not found. id=" + requestId));
+
+            if (briefingRequest.getStatus() == BriefingStatus.COMPLETED) {
+                log.info("이미 완료된 요청입니다. requestId={}", requestId);
+                return;
+            }
+
+            if (briefingRequest.getStatus() == BriefingStatus.PROCESSING) {
+                log.info("이미 처리 중인 요청입니다. requestId={}", requestId);
+                return;
+            }
+
+            briefingRequest.markProcessing(LocalDateTime.now());
+
             StockBriefingRequest req =
                     objectMapper.readValue(briefingRequest.getRequestPayload(), StockBriefingRequest.class);
 
@@ -55,13 +57,14 @@ public class BriefingConsumerService {
                     briefingRequest.getId(), briefingRequest.getStockName());
 
         } catch (Exception e) {
-            briefingRequest.markFailed(truncateErrorMessage(e.getMessage()), LocalDateTime.now());
 
-            log.error("briefing failed. requestId={}, stockName={}",
-                    briefingRequest.getId(), briefingRequest.getStockName(), e);
+            if (briefingRequest != null) {
+                briefingRequest.markFailed(truncateErrorMessage(e.getMessage()), LocalDateTime.now());
+            }
+
+            log.error("briefing failed. requestId={}", requestId, e);
         }
     }
-
     private String truncateErrorMessage(String message) {
         if (message == null) {
             return "unknown error";
