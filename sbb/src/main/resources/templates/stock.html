@@ -604,7 +604,7 @@
       // 1) 즉시 결과를 받는 것이 아니라 requestId를 받는다
       const submitRes = await fetch("/api/stock-briefing/request", {
         method: "POST",
-        headers,
+        headers: headers,
         body: JSON.stringify(payload)
       });
 
